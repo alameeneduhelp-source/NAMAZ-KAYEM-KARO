@@ -441,7 +441,7 @@ function renderHome(){
   for(const p of PRAYERS){ if(timeToMinutes(day.jamaat[p]) >= nowMin){ next={name:PNAME[p], time:day.jamaat[p]}; break; } }
   if(!next) next = {name:PNAME.fajr+' (আগামীকাল)', time:day.jamaat.fajr};
 
-  document.getElementById('userChip').textContent = DB.currentUser ? ('👤 '+DB.currentUser.wa) : '';
+  document.getElementById('userChip').textContent = DB.currentUser ? ('👤 '+(DB.currentUser.name||DB.currentUser.wa)) : '';
 
   if(!DB.currentUser){
     const b = DB.branding || defaultBranding();
@@ -458,19 +458,44 @@ function renderHome(){
       </div>
       <div class="card" style="text-align:center;padding:28px 20px;" id="loginCard">
         <div style="font-size:2.4rem;margin-bottom:8px;">📱</div>
-        <h2 style="font-size:1.2rem;">ইউজার লগইন</h2>
-        <div style="color:var(--muted);margin-bottom:18px;">আপনার রেজিস্টার্ড ফোন নম্বর দিয়ে লগইন করুন</div>
-        <div style="text-align:left;max-width:340px;margin:0 auto;">
-          <label>📱 ফোন নম্বর (country code সহ)</label>
-          <input id="loginWa" placeholder="91XXXXXXXXXX" inputmode="numeric" autocomplete="tel">
+        <h2 style="font-size:1.2rem;">ইউজার লগইন / রেজিস্টার</h2>
+        <div style="display:flex;gap:8px;max-width:340px;margin:0 auto 14px;">
+          <button class="btn gold" id="tabLogin" style="flex:1;">🔑 লগইন</button>
+          <button class="btn ghost" id="tabReg" style="flex:1;">📝 নতুন রেজিস্টার</button>
+        </div>
+        <div id="loginForm" style="text-align:left;max-width:340px;margin:0 auto;">
+          <div style="color:var(--muted);margin-bottom:10px;text-align:center;">রেজিস্টার করা মোবাইল নম্বর দিয়ে লগইন করুন</div>
+          <label>📱 মোবাইল নম্বর (১০ ডিজিট)</label>
+          <input id="loginWa" placeholder="9XXXXXXXXX" inputmode="numeric" maxlength="13" autocomplete="tel">
           <button class="btn gold" id="loginBtn" style="width:100%;font-size:1.1rem;">✅ লগইন করুন</button>
         </div>
+        <div id="regForm" class="hidden" style="text-align:left;max-width:340px;margin:0 auto;">
+          <div style="color:var(--muted);margin-bottom:10px;text-align:center;">প্রথমবার? নাম ও মোবাইল নম্বর দিয়ে রেজিস্টার করুন</div>
+          <label>👤 আপনার নাম</label>
+          <input id="regName" placeholder="নাম" autocomplete="name">
+          <label>📱 মোবাইল নম্বর (১০ ডিজিট)</label>
+          <input id="regWa" placeholder="9XXXXXXXXX" inputmode="numeric" maxlength="13" autocomplete="tel">
+          <button class="btn gold" id="regBtn" style="width:100%;font-size:1.1rem;">📝 রেজিস্টার করুন</button>
+        </div>
       </div>`;
+    const showTab=(reg)=>{
+      document.getElementById('loginForm').classList.toggle('hidden',reg);
+      document.getElementById('regForm').classList.toggle('hidden',!reg);
+      document.getElementById('tabLogin').className='btn '+(reg?'ghost':'gold');
+      document.getElementById('tabReg').className='btn '+(reg?'gold':'ghost');
+    };
+    document.getElementById('tabLogin').onclick=()=>showTab(false);
+    document.getElementById('tabReg').onclick=()=>showTab(true);
     document.getElementById('loginBtn').onclick=async()=>{
-      const wa=document.getElementById('loginWa').value.trim().replace(/\D/g,'');
-      if(!wa || wa.length<8){ alert('সঠিক ফোন নম্বর দিন'); return; }
+      const wa=normPhone(document.getElementById('loginWa').value);
+      if(wa.length!==10){ alert('১০ ডিজিটের সঠিক মোবাইল নম্বর দিন'); return; }
       const b=document.getElementById('loginBtn'); b.disabled=true; b.textContent='⏳ অপেক্ষা করুন...';
       try{ await userLogin(wa); }catch(e){ alert(authMsg(e)); b.disabled=false; b.textContent='✅ লগইন করুন'; }
+    };
+    document.getElementById('regBtn').onclick=async()=>{
+      const nm=document.getElementById('regName').value, wa=document.getElementById('regWa').value;
+      const b=document.getElementById('regBtn'); b.disabled=true; b.textContent='⏳ অপেক্ষা করুন...';
+      try{ await userRegister(nm,wa); }catch(e){ alert(authMsg(e)); b.disabled=false; b.textContent='📝 রেজিস্টার করুন'; }
     };
     document.getElementById('heroUserBtn').onclick=()=>{
       document.getElementById('loginCard').scrollIntoView({behavior:'smooth', block:'start'});
@@ -1259,6 +1284,8 @@ const fAuth=firebase.auth(), fDb=firebase.firestore();
 try{ fDb.enablePersistence({synchronizeTabs:true}).catch(()=>{}); }catch(e){}
 const MAIL_DOMAIN='khasmallick.app';
 const PARTS={core:['schedules','hadith','hadithPool','hadithPoolVersion','announcements','audit','adminWhatsapp','notifSettings','eid'],alarm:['alarmSound','alarmSoundName'],brand:['branding']};
+function normPhone(p){ let d=String(p||'').replace(/\D/g,''); if(d.length===12&&d.startsWith('91')) d=d.slice(2); else if(d.length===11&&d.startsWith('0')) d=d.slice(1); return d; }
+function waLink(number,text){ let n=String(number).replace(/\D/g,''); if(n.length===10) n='91'+n; return 'https://wa.me/'+n+'?text='+encodeURIComponent(text); }
 function userPw(phone){ return 'mk-'+phone+'-khasmallick'; }
 function authEmail(phone,v){ return phone+(v>1?'.v'+v:'')+'@'+MAIL_DOMAIN; }
 function deviceId(){ let d=localStorage.getItem('markaz_device_id'); if(!d){ d=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2); localStorage.setItem('markaz_device_id',d); } return d; }
@@ -1385,11 +1412,29 @@ async function adminChangePassword(cur,nw){
 
 // ---- user login / forgot / logout ----
 async function userLogin(phone){
-  phone=phone.replace(/\D/g,'');
+  phone=normPhone(phone);
+  if(!/^\d{10}$/.test(phone)) throw {msg:'১০ ডিজিটের সঠিক মোবাইল নম্বর দিন।'};
   const idx=await fDb.doc('loginIndex/'+phone).get();
   if(!idx.exists) throw {msg:'এই নম্বর রেজিস্টার্ড নয়। এডমিনের সাথে যোগাযোগ করুন।'};
   try{ await fAuth.signInWithEmailAndPassword(authEmail(phone,idx.data().v||1),userPw(phone)); }
   catch(e){ if(e&&(e.code==='auth/invalid-credential'||e.code==='auth/wrong-password')) throw {msg:'এই অ্যাকাউন্টটি পুরনো পদ্ধতিতে তৈরি। এডমিনকে বলুন ইউজার তালিকা থেকে ✏ এডিট চেপে একবার সেভ করতে।'}; throw e; }
+}
+async function userRegister(name,phone){
+  phone=normPhone(phone); name=name.trim();
+  if(name.length<2) throw {msg:'আপনার নাম লিখুন।'};
+  if(!/^\d{10}$/.test(phone)) throw {msg:'১০ ডিজিটের সঠিক মোবাইল নম্বর দিন।'};
+  if((await fDb.doc('loginIndex/'+phone).get()).exists) throw {msg:'এই নম্বর আগেই রেজিস্টার্ড। "লগইন" ট্যাব থেকে লগইন করুন।'};
+  CLOUD.settingUp=true; let user=null;
+  try{
+    try{ user=(await fAuth.createUserWithEmailAndPassword(authEmail(phone,1),userPw(phone))).user; }
+    catch(e){ if(e&&e.code==='auth/email-already-in-use') user=(await fAuth.signInWithEmailAndPassword(authEmail(phone,1),userPw(phone))).user; else throw e; }
+    const b=fDb.batch();
+    b.set(fDb.doc('users/'+phone),{phone,name,uid:user.uid,active:true,deviceId:deviceId(),prefs:{},alarmOverride:{},createdAt:Date.now()});
+    b.set(fDb.doc('loginIndex/'+phone),{v:1});
+    b.set(fDb.doc('uidmap/'+user.uid),{phone});
+    await b.commit();
+  }catch(e){ CLOUD.settingUp=false; try{ if(user) await user.delete(); }catch(_){} throw e; }
+  CLOUD.settingUp=false; await startSession(user);
 }
 async function userLogout(){
   stopAll(); try{ if(CLOUD.phone) await fDb.doc('users/'+CLOUD.phone).update({deviceId:null}); }catch(e){}
@@ -1400,7 +1445,7 @@ async function userLogout(){
 function secApp(){ return firebase.apps.find(a=>a.name==='sec')||firebase.initializeApp(FB_CFG,'sec'); }
 async function createAuth(phone,v,pw){ const s=secApp().auth(); const c=await s.createUserWithEmailAndPassword(authEmail(phone,v),pw); await s.signOut(); return c.user.uid; }
 async function addUser(name,phone){
-  if(!/^\d{8,15}$/.test(phone)) throw {msg:'সঠিক ফোন নম্বর দিন (country code সহ, শুধু ডিজিট)।'};
+  if(!/^\d{10}$/.test(phone)) throw {msg:'১০ ডিজিটের সঠিক মোবাইল নম্বর দিন।'};
   if((await fDb.doc('loginIndex/'+phone).get()).exists) throw {msg:'এই নম্বর আগেই রেজিস্টার্ড।'};
   const uid=await createAuth(phone,1,userPw(phone)), b=fDb.batch();
   b.set(fDb.doc('uidmap/'+uid),{phone}); b.set(fDb.doc('loginIndex/'+phone),{v:1});
@@ -1409,7 +1454,7 @@ async function addUser(name,phone){
 }
 // change phone and/or password (new Auth account, old one is cut off)
 async function rotateUser(oldPhone,newPhone){
-  if(!/^\d{8,15}$/.test(newPhone)) throw {msg:'সঠিক ফোন নম্বর দিন।'};
+  if(!/^\d{10}$/.test(newPhone)) throw {msg:'১০ ডিজিটের সঠিক মোবাইল নম্বর দিন।'};
   if(newPhone!==oldPhone && (await fDb.doc('loginIndex/'+newPhone).get()).exists) throw {msg:'নতুন নম্বর আগেই রেজিস্টার্ড।'};
   const old=(await fDb.doc('users/'+oldPhone).get()).data(), v=((await fDb.doc('loginIndex/'+oldPhone).get()).data().v||1)+1;
   const uid=await createAuth(newPhone,v,userPw(newPhone)), b=fDb.batch();
@@ -1428,7 +1473,7 @@ function usersBoxHTML(){
   const rows=DB.users.map(u=>`<div class="userrow" style="flex-wrap:wrap;gap:6px;"><span>📱 ${esc(u.wa)} ${u.name?'· '+esc(u.name):''}<br><small>${u.active===false?'🔴 নিষ্ক্রিয়':'🟢 সক্রিয়'} · ${u.deviceId?'📲 ডিভাইস বাঁধা':'ডিভাইস ফাঁকা'}</small></span>
     <span style="display:flex;gap:6px;flex-wrap:wrap;"><button class="btn ghost" data-uact="${esc(u.wa)}">${u.active===false?'চালু করুন':'বন্ধ করুন'}</button><button class="btn ghost" data-udev="${esc(u.wa)}">ডিভাইস রিসেট</button><button class="btn ghost" data-uedit="${esc(u.wa)}">✏ এডিট</button><button class="btn ghost" data-udel="${esc(u.wa)}">🗑</button><a class="wabtn" target="_blank" href="${waLink(u.wa,msg)}">📲 WhatsApp</a></span></div>`).join('');
   return `<h2 style="margin-top:14px;">👥 ইউজার ম্যানেজমেন্ট (${DB.users.length})</h2>
-    <label>নাম (ঐচ্ছিক)</label><input id="nuName"><label>ফোন নম্বর (country code সহ)</label><input id="nuPhone" inputmode="numeric" placeholder="91XXXXXXXXXX">
+    <label>নাম (ঐচ্ছিক)</label><input id="nuName"><label>মোবাইল নম্বর (১০ ডিজিট)</label><input id="nuPhone" inputmode="numeric" maxlength="10" placeholder="9XXXXXXXXX">
     <button class="btn" id="nuAdd">➕ ইউজার রেজিস্টার</button>${rows||'<div class="note">এখনো কোনো ইউজার নেই।</div>'}`;
 }
 function refreshUsersBox(){
@@ -1436,11 +1481,11 @@ function refreshUsersBox(){
   const keep=['nuName','nuPhone'].map(i=>(document.getElementById(i)||{}).value||''); box.innerHTML=usersBoxHTML();
   ['nuName','nuPhone'].forEach((i,k)=>document.getElementById(i).value=keep[k]);
   const run=async(fn,ok)=>{ try{ await fn(); if(ok) alert(ok); }catch(e){ alert(authMsg(e)); } };
-  document.getElementById('nuAdd').onclick=()=>run(async()=>{ await addUser(document.getElementById('nuName').value.trim(),document.getElementById('nuPhone').value.replace(/\D/g,''));  ['nuName','nuPhone'].forEach(i=>document.getElementById(i).value=''); },'ইউজার রেজিস্টার হয়েছে।');
+  document.getElementById('nuAdd').onclick=()=>run(async()=>{ await addUser(document.getElementById('nuName').value.trim(),normPhone(document.getElementById('nuPhone').value));  ['nuName','nuPhone'].forEach(i=>document.getElementById(i).value=''); },'ইউজার রেজিস্টার হয়েছে।');
   box.querySelectorAll('[data-uact]').forEach(b=>b.onclick=()=>{ const u=DB.users.find(x=>x.wa===b.dataset.uact); run(()=>fDb.doc('users/'+u.wa).update({active:u.active===false})); });
   box.querySelectorAll('[data-udev]').forEach(b=>b.onclick=()=>run(()=>fDb.doc('users/'+b.dataset.udev).update({deviceId:null}),'ডিভাইস রিসেট হয়েছে।'));
   box.querySelectorAll('[data-udel]').forEach(b=>b.onclick=()=>{ if(confirm(b.dataset.udel+' মুছে ফেলবেন?')) run(()=>deleteUser(b.dataset.udel)); });
-  const edit=(phone)=>{ const np=prompt('ফোন নম্বর পরিবর্তন করুন (একই রাখতে OK চাপুন):',phone); if(np===null) return; run(()=>rotateUser(phone,(np.replace(/\D/g,'')||phone)),'আপডেট হয়েছে। ইউজার নতুন নম্বর দিয়ে লগইন করবে।'); };
+  const edit=(phone)=>{ const np=prompt('ফোন নম্বর পরিবর্তন করুন (একই রাখতে OK চাপুন):',phone); if(np===null) return; run(()=>rotateUser(phone,(normPhone(np)||phone)),'আপডেট হয়েছে। ইউজার নতুন নম্বর দিয়ে লগইন করবে।'); };
   box.querySelectorAll('[data-uedit]').forEach(b=>b.onclick=()=>edit(b.dataset.uedit));
 }
 
